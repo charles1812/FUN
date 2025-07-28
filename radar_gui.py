@@ -7,6 +7,10 @@ WIDTH, HEIGHT = 800, 800
 CENTER = WIDTH // 2, HEIGHT // 2
 RADIUS = 350
 
+REAL_RADIUS_KM = 100
+PIXEL_RADIUS = RADIUS  # keep as 350
+KM_PER_PIXEL = REAL_RADIUS_KM / PIXEL_RADIUS  # ~0.2857 km per pixel
+
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Radar Display V2")
 font = pygame.font.SysFont("monospace", 14)
@@ -86,23 +90,42 @@ def polar_to_cartesian(angle_deg, distance):
     y = CENTER[1] + distance * math.sin(rad)
     return int(x), int(y)
 
+def kmh_to_pixel_per_frame(kmh):
+    km_per_sec = kmh / 3600
+    pixel_per_sec = km_per_sec / KM_PER_PIXEL
+    return pixel_per_sec / 60  # 60 FPS
+
 # Initialize targets
 labels = ["🚀 Missile", "✈️ Jet", "🛸 Drone"]
 targets = []
 
-def spawn_target():
+def spawn_swarm(count=20, arrival_time=5.0, label="🛸 Drone"):
+    for _ in range(count):
+        angle = random.uniform(0, 360)
+        dist = random.uniform(RADIUS + 100, RADIUS + 300)  # start outside radar
+        v_dist = -kmh_to_pixel_per_frame(300)  # calculate speed to hit center on time
+        v_angle = 0
+        targets.append(Target(angle, dist, v_angle, v_dist, label))
+
+def spawn_plane():
     angle = random.randint(0, 359)
     dist = random.uniform(RADIUS + 50, RADIUS + 150)  # outside radar circle
-    label = random.choice(labels)
+    label = "✈️ Jet"
     
-    if "✈️" in label:
-        # Planes fly inward first
-        v_dist = -random.uniform(0.5, 1.0)  # move inward
-        v_angle = 0  # or small angular speed
-    else:
+    # Planes fly inward first
+    v_dist = -kmh_to_pixel_per_frame(2000)  # move inward
+    v_angle = 0  # or small angular speed
+    
+    targets.append(Target(angle, dist, v_angle, v_dist, label))
+
+def spawn_missiles():
+    angle = random.randint(0, 359)
+    dist = random.uniform(RADIUS + 50, RADIUS + 150)  # outside radar circle
+    label = "🚀 Missile"
+
         # Missiles/drones fly straight inward
-        v_dist = -random.uniform(1.0, 2.0)  # faster inward
-        v_angle = 0
+    v_dist = -kmh_to_pixel_per_frame(3000)  # faster inward
+    v_angle = 0
     
     targets.append(Target(angle, dist, v_angle, v_dist, label))
 
@@ -116,6 +139,9 @@ while running:
 
     # Draw radar circle
     pygame.draw.circle(screen, (0, 255, 0), CENTER, RADIUS, 1)
+    for i in range(10, REAL_RADIUS_KM + 1, 10):
+        r = int(i / KM_PER_PIXEL)
+        pygame.draw.circle(screen, (0, 80, 0), CENTER, r, 1)
 
     # Sweep
     sweep_x = CENTER[0] + RADIUS * math.cos(math.radians(angle))
@@ -137,16 +163,27 @@ while running:
 
     # Spawn new targets
     if spawn_cooldown <= 0:
-        spawn_target()
         spawn_cooldown = 120  # frames
     else:
         spawn_cooldown -= 1
+
+    # Timed drone/missile swarm spawn every 10 seconds
 
     pygame.display.flip()
     clock.tick(60)
 
     # Quit
     for event in pygame.event.get():
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                swarm_size = random.randint(10, 50)
+                spawn_swarm(count=swarm_size, arrival_time=500.0)
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_p:
+                spawn_plane()
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_m:
+                spawn_missiles()
         if event.type == pygame.QUIT:
             running = False
 
